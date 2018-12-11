@@ -1,0 +1,6 @@
+# Python's Byte Code #
+*.pyc
+
+# Text and data files
+*.txt
+*.csv
