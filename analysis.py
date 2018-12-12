@@ -19,20 +19,24 @@ from os import listdir
 from datetime import datetime as dt
 
 
-def process_text_files():
+def process_text_files(path_txt, path_csv, cols=[]):
     """
     Process txt files by reading them with pandas and saving them to csv.
 
-    Graphlab loads csv files much faster than pandas.
+    path_txt: Path to read text files
+    path_csv: Path to save csv files
+    cols = Names to use for columns ['sq_id', 'prov', 'timeint', 'sq_to_prov']
+
+    Graphlab loads csv files much faster than pandas and can scale to a
+    distributed storage.
     """
-    cols = ['sq_id', 'time', 'ccode', 'smsin',
-            'smsout', 'callin', 'callout', 'web']
-    url = 'dec_full/'  # 'sms-call-internet-mi-2013-{}-{}.txt'
-    for file_name in listdir('./dec_full/'):
+    # url = 'dec_full/'  # 'sms-call-internet-mi-2013-{}-{}.txt'
+    # TODO: quite slow processing, parellize the file reads and write
+    for file_name in listdir(path_txt):
         print 'Processing file {}\n'.format(file_name)
-        df = pd.read_csv(url + file_name, sep='\t', header=None, names=cols,
-                         index_col=0)
-        df.to_csv('data_csv/' + file_name.replace('txt', 'csv'))
+        df = pd.read_csv(path_txt + file_name, sep='\t', header=None,
+                         names=cols, index_col=0)
+        df.to_csv(path_csv + file_name.replace('txt', 'csv'))
 
 
 def get_data(path):
