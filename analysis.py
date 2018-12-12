@@ -15,8 +15,20 @@ import pandas as pd
 import numpy as np
 import graphlab as gp
 import graphlab.aggregate as agg
-from os import listdir
+from os import listdir, rename, chdir
 from datetime import datetime as dt
+
+
+def rename_files(path):
+    """
+    Rename files in batch manner.
+
+    path: location of files to be renamed
+    """
+    for fn in listdir(path):
+        if fn.endswith('txt'):
+            rename(path + fn, path + fn.replace('txt', 'csv'))
+            print 'Renamed {} to {}\n'.format(fn, fn.replace('txt', 'csv'))
 
 
 def process_text_files(path_txt, path_csv, cols=[]):
@@ -30,13 +42,17 @@ def process_text_files(path_txt, path_csv, cols=[]):
     Graphlab loads csv files much faster than pandas and can scale to a
     distributed storage.
     """
-    # url = 'dec_full/'  # 'sms-call-internet-mi-2013-{}-{}.txt'
-    # TODO: quite slow processing, parellize the file reads and write
+    # TODO: quite slow processing, parellize the file reads and write, maybe
+    # reading and re-writing the whole file is not needed
+    # GraphLab's SFrame.read_csv API does not allow passing of column names at
+    # the time of reading the csv as pandas does.
+    rename_files(path_txt)
+
     for file_name in listdir(path_txt):
         print 'Processing file {}\n'.format(file_name)
         df = pd.read_csv(path_txt + file_name, sep='\t', header=None,
                          names=cols, index_col=0)
-        df.to_csv(path_csv + file_name.replace('txt', 'csv'))
+        df.to_csv(path_csv)
 
 
 def get_data(path):
@@ -82,8 +98,9 @@ def get_congested_day(df):
 
 
 if __name__ == '__main__':
-    sf_milano = get_data('../data/mi_telco_all')  # TODO different cities
-    sf_trentino = get_data()
+    # Question 1:
+    sf_milano = get_data('../data/mi_telco_all')
+    sf_trentino = get_data() # TODO different cities
     operations = {'smsin_tot': agg.SUM('smsin'),
                   'smsout_tot': agg.SUM('smsout'),
                   'callin_tot': agg.SUM('callin'),
@@ -93,3 +110,5 @@ if __name__ == '__main__':
     # process_text_files()
     sfmi = agg_by_time_slots(sf_milano, ops=operations)
     print 'Aggregated time slots {}\n'.format(df.head())
+
+    # Question 2
