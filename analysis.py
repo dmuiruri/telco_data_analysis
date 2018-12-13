@@ -125,7 +125,7 @@ def get_data_api(api_id, api_key):
     """
     Get data through the API
 
-    Returns a json dataset
+    Returns a GraphLab's SFrame
     """
     done = False
     limit = 50000
@@ -135,16 +135,15 @@ def get_data_api(api_id, api_key):
     df = pd.DataFrame()
     while not done:
         print('A new round offset: {} and limit: {}\n'.format(offset, limit))
-        # url = 'https://api.dandelion.eu/datagems/v2/SpazioDati/social-pulse-milano/data?$limit=269290&$offset=0&$app_id={}&$app_key={}'.format(API_ID, API_KEY)
-        r = requests.get(url + params.format(limit, offset, api_id, api_key))
+        try:
+            r = requests.get(url + params.format(limit, offset, api_id, api_key))
+        except ValueError:
+            print 'Could not process the get request'
         data = r.json()
         df = df.append(pd.DataFrame(data['items']))
         offset += limit
-#        print '{}'.format(data)
         if not len(data['items']) > 0:
             done = True
-        # else:
-        #     done = True
     return gp.SFrame(data=df)
 
 
