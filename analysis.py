@@ -83,11 +83,37 @@ def agg_by_time_slots(sf, groupingcol, ops={}):
                                        strftime('%Y-%m-%d %H:%M:%S'))
     # df['utc'] = [dt.utcfromtimestamp(i/1e3).strftime('%Y-%m-%d %H:%M:%S')
     #              for i in df['time']]
-    df = res.to_dataframe()
-    df.set_index('utc', inplace=True)
-    df.index = pd.to_datetime(df.index)
-    df.drop(columns='time', inplace=True)
-    return df
+    sf_df = res.to_dataframe()
+    sf_df.set_index('utc', inplace=True)
+    sf_df.index = pd.to_datetime(df.index)
+    sf_df.drop(columns='time', inplace=True)
+    return sf_df
+
+
+def agg_recording_hour(sfdf):
+    """
+    Aggregate data according to recording hours.
+
+    This means calculating the mean of the data over a given hour, e.g. 23:00
+    taking the mean of all data recorded at 23:00 each day so that it is
+    possible to compare traffic on per hour basis or the recording time.
+    """
+    opsv2 = {'SMSsIn': agg.MEAN('smsin_tot'),
+             'SMSsout': agg.MEAN('smsout_tot'),
+             'CallsIn': agg.MEAN('callin_tot'),
+             'CallsOut': agg.MEAN('callout_tot'),
+             'WebTraff': agg.MEAN('web_tot')
+             }
+
+    sfdf['hour'] = sfdf['time'].apply(lambda x: dt.utcfromtimestamp(x/1e3).
+                                      strftime('%H:%M:%S'))
+    sf = gp.SFrame(data=sfdf[['callin_tot', 'callout_tot', 'smsin_tot',
+                   'web_tot', 'smsout_tot', 'hour']])
+    sf_grouped = sf.groupby('hour', operations=opsv2)
+    sfdf = sf_grouped.sort('hour').to_dataframe().set_index('hour')
+    sfdf.index = pd.to_datetime(sfdf.index)
+    sfdf = sfdf.resample('H').sum()
+    return np.log(sfdf.aggregate('sum', axis='columns'))
 
 
 # def convert_sf_to_df(sf, time_col):
@@ -155,6 +181,7 @@ def tweeting_language_popularity(sf):
 
 if __name__ == '__main__':
     # Question 1):
+
     # process_text_files()
     sf_milano = get_data('../data/mi_telco_all')
     sf_trentino = get_data('')  # TODO different cities
@@ -164,7 +191,7 @@ if __name__ == '__main__':
                   'callout_tot': agg.SUM('callout'),
                   'web_tot': agg.SUM('web')
                   }
-    mi_df = agg_by_time_slots(sf_milano, ops=operations)
+    mi_df = agg_by_time_slots(sf_milano, time, ops=operations)
     mi_res = get_congested_day(mi_df)
     # tr_df = agg_by_time_slots(sf_milano, ops=operations)
     # tr_res = get_congested_day(mi_df)
