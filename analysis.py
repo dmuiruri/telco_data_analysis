@@ -15,7 +15,7 @@ import pandas as pd
 import numpy as np
 import graphlab as gp
 import graphlab.aggregate as agg
-import requests
+import requests as req
 from os import listdir, rename, chdir
 from datetime import datetime as dt
 
@@ -125,7 +125,7 @@ def get_data_api(api_id, api_key):
     """
     Get data through the API
 
-    Returns a GraphLab's SFrame
+    Returns a GraphLab SFrame
     """
     done = False
     limit = 50000
@@ -136,7 +136,7 @@ def get_data_api(api_id, api_key):
     while not done:
         print('A new round offset: {} and limit: {}\n'.format(offset, limit))
         try:
-            r = requests.get(url + params.format(limit, offset, api_id, api_key))
+            r = req.get(url + params.format(limit, offset, api_id, api_key))
         except ValueError:
             print 'Could not process the get request'
         data = r.json()
@@ -145,6 +145,12 @@ def get_data_api(api_id, api_key):
         if not len(data['items']) > 0:
             done = True
     return gp.SFrame(data=df)
+
+
+def tweeting_language_popularity(sf):
+    """Get language popularity."""
+    return sf.groupby('language', operations={'tweets': agg.COUNT()}
+                      ).sort('tweets', ascending=False)
 
 
 if __name__ == '__main__':
@@ -172,3 +178,10 @@ if __name__ == '__main__':
     print 'Most called province from Milano {}'.format(mi_to_prov)
 
     # Question 3):
+    api_id = 'xxxx'
+    api_key = 'xxxx'
+    mi_tweet_sf = get_data_api(api_id, api_key)
+    res = tweeting_language_popularity(sf)
+    print 'Top five language used in tweeting {}'.format(res[:5])
+
+    # Question 4):
