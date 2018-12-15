@@ -4,3 +4,8 @@
 # Text and data files
 *.txt
 *.csv
+
+# Image files
+*.png
+*.jpg
+*.jpeg

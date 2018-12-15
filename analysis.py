@@ -16,6 +16,8 @@ import numpy as np
 import graphlab as gp
 import graphlab.aggregate as agg
 import requests as req
+import seaborn as sns
+import matplotlib.pyplot as plt
 from os import listdir, rename, chdir
 from datetime import datetime as dt
 
@@ -32,12 +34,13 @@ def rename_files(path):
             print 'Renamed {} to {}\n'.format(fn, fn.replace('txt', 'csv'))
 
 
-def process_text_files(path_txt, path_csv, cols=[]):
+def process_text_files(path_txt, path_csv, sep, cols=[]):
     """
     Process txt files by reading them with pandas and saving them to csv.
 
     path_txt: Path to read text files
     path_csv: Path to save csv files
+    sep: column seperator character
     cols = Names to use for columns ['sq_id', 'prov', 'timeint', 'sq_to_prov']
 
     Graphlab loads csv files much faster than pandas and can scale to a
@@ -53,15 +56,22 @@ def process_text_files(path_txt, path_csv, cols=[]):
     rename_files(path_txt)
 
     for file_name in listdir(path_txt):
-        print 'Processing file {}\n'.format(file_name)
-        df = pd.read_csv(path_txt + file_name, sep='\t', header=None,
-                         names=cols, index_col=0)
-        df.to_csv(path_csv)
+        if file_name.endswith('csv'):
+            print 'Processing file {}\n'.format(file_name)
+            df = pd.read_csv(path_txt + file_name, sep=sep, header=None,
+                             names=cols, index_col=0)
+            df.to_csv(path_csv + file_name)
 
 
-def get_data(path):
-    """Get data for analysis."""
-    return gp.SFrame.read_csv(path)
+def get_data_from_csv(path, header=True):
+    """
+    Get data for analysis.
+
+    path: A path string to a directory containing csv rile
+
+    returns a GraphLab SFrame containing data.
+    """
+    return gp.SFrame.read_csv(path, header=header)
 
 
 def agg_by_time_slots(sf, groupingcol, ops={}):
@@ -90,7 +100,7 @@ def agg_by_time_slots(sf, groupingcol, ops={}):
     return sf_df
 
 
-def agg_recording_hour(sfdf):
+def agg_traffic_per_hour(sfdf):
     """
     Aggregate data according to recording hours.
 
@@ -114,17 +124,6 @@ def agg_recording_hour(sfdf):
     sfdf.index = pd.to_datetime(sfdf.index)
     sfdf = sfdf.resample('H').sum()
     return np.log(sfdf.aggregate('sum', axis='columns'))
-
-
-# def convert_sf_to_df(sf, time_col):
-#     """
-#     Convert an SFrame into a dataframe and assign an index(time).
-#
-#     sf: The SFrame to be converted
-#     time_col
-#     """
-#     sf['utc'] = sf['time_col'].apply(lambda x: dt.utcfromtimestamp(x/1e3).
-#                                      strftime('%Y-%m-%d %H:%M:%S'))
 
 
 def get_congested_day(df):
@@ -179,6 +178,52 @@ def tweeting_language_popularity(sf):
                       ).sort('tweets', ascending=False)
 
 
+def plot_distributions(sfdf):
+    """
+    Plot distributions comparing Dec and Nov agg_traffic_per_hour.
+    sfdf: is a pandas DataFrame
+    """
+    calls_nov = sfdf['26/11/2013':'28/11/2013'][['callin_tot', 'callout_tot']]
+    web_nov = sfdf['26/11/2013':'28/11/2013'][['web_tot']]
+    calls_dec = sfdf['24/12/2013':'26/12/2013'][['callin_tot', 'callout_tot']]
+    web_dec = sfdf['24/12/2013':'26/12/2013'][['web_tot']]
+
+    sns.set(style="white", color_codes=True)  # palette="muted"
+    f, axes = plt.subplots(2, 2, figsize=(7, 7))  # sharex=True
+    sns.despine(left=True)
+    sns.distplot(np.log(calls_nov.agg('sum', axis='columns')),
+                 color="m", ax=axes[0, 0], label='Nov')
+    sns.distplot(np.log(calls_dec.agg('sum', axis='columns')),
+                 color="m", ax=axes[0, 1], label='Dec')
+    sns.distplot(np.log(web_nov), color="g", ax=axes[1, 0],
+                 label='Nov Web Traffic')
+    plt.legend()
+    sns.distplot(np.log(web_dec), color="r", ax=axes[1, 1],
+                 label='Dec Web Traffic')
+    # plt.setp(axes)
+    plt.tight_layout()
+    plt.legend()
+    plt.savefig('./distributions.png')
+
+
+def process_weather_data(path_weather, path_sensor):
+    """
+    Process weather data.
+
+    path_weather: path to weather data
+    path_sensor: path to sensor data
+
+    Returns a graphlab's SFrame
+    The weather recording data and sensor information is given in two seperate
+    files, where the weather data contains measurements and sensor id, sensor
+    data contains sensor information.
+    """
+    weather = get_data_from_csv(path_weather)  # '../data/mi_weather/'
+    sensors = get_data_from_csv(path_sensor)  # '../data/mi_sensors/'
+    wdata = weather.join(sensors, on='sensor', how='left')
+    return wdata
+
+
 if __name__ == '__main__':
     # Question 1):
 
@@ -193,6 +238,7 @@ if __name__ == '__main__':
                   }
     mi_df = agg_by_time_slots(sf_milano, time, ops=operations)
     mi_res = get_congested_day(mi_df)
+    mi_res_hourly = agg_traffic_per_hour(mi_df)
     # tr_df = agg_by_time_slots(sf_milano, ops=operations)
     # tr_res = get_congested_day(mi_df)
     print 'Aggregated time slots {}\n'.format(mi_res)
@@ -212,3 +258,7 @@ if __name__ == '__main__':
     print 'Top five language used in tweeting {}'.format(res[:5])
 
     # Question 4):
+    sfdf_dist = agg_by_time_slots(sf_milano)
+    plot_distributions(sfdf)
+
+    # Question 5):
