@@ -9,7 +9,7 @@ analysis are GraphLab and Pandas.
 __author__ = "Dennis Muiruri"
 __version__ = "1.0.0"
 __status__ = "Development"
-__maintainer__ = "Dennis Muiuri"
+__maintainer__ = "Dennis Muiruri"
 
 import pandas as pd
 import numpy as np
@@ -18,7 +18,7 @@ import graphlab.aggregate as agg
 import requests as req
 import seaborn as sns
 import matplotlib.pyplot as plt
-from os import listdir, rename, chdir
+from os import listdir, rename
 from datetime import datetime as dt
 
 
@@ -41,7 +41,8 @@ def process_text_files(path_txt, path_csv, sep, cols=[]):
     path_txt: Path to read text files
     path_csv: Path to save csv files
     sep: column seperator character
-    cols = Names to use for columns ['sq_id', 'prov', 'timeint', 'sq_to_prov']
+    cols = ['sq_id', 'time', 'ccode', 'smsin', 'smsout', 'callin',
+            'callout', 'web']
 
     Graphlab loads csv files much faster than pandas and can scale to a
     distributed storage.
@@ -74,6 +75,18 @@ def get_data_from_csv(path, header=True):
     return gp.SFrame.read_csv(path, header=header)
 
 
+def get_data_from_json(path):
+    """
+    Read data into a dataframe form a JSON file.
+
+    path: A path string to a JSON rile
+
+    returns a Pandas DataFrame
+    """
+    df = pd.read_csv(path).set_index('created', inplace=True)
+    return gp.SFrame(df)
+
+
 def agg_by_time_stamp(sf, groupingcol, ops={}):
     """
     Aggregate a given SFrame by the given set of operations.
@@ -93,7 +106,7 @@ def agg_by_time_stamp(sf, groupingcol, ops={}):
     sf_df = res.to_dataframe()
     sf_df.set_index('utc', inplace=True)
     sf_df.index = pd.to_datetime(sf_df.index)
-    sf_df.drop(columns='time', inplace=True)
+    # sf_df.drop(columns='time', inplace=True)
     return sf_df
 
 
@@ -178,7 +191,8 @@ def get_data_api(api_id, api_key):
     """
     done = False
     limit = 50000
-    url = 'https://api.dandelion.eu/datagems/v2/SpazioDati/social-pulse-milano/data?'
+    # url = 'https://api.dandelion.eu/datagems/v2/SpazioDati/social-pulse-milano/data?'
+    url = 'https://api.dandelion.eu/datagems/v2/SpazioDati/meteotrentino-weather-station-data/data?'
     params = '$limit={}&$offset={}&$app_id={}&$app_key={}'  # 269290
     offset = 0
     df = pd.DataFrame()
@@ -365,35 +379,56 @@ def get_sensors_in_poll_station(sensor_path, station):
 
 
 if __name__ == '__main__':
-    # Question 1):
-
     # process_text_files()
-    sf_milano = get_data('../data/mi_telco_all')
-    sf_trentino = get_data('')  # TODO different cities
+    sfmi = get_data_from_csv('../data/mi_telco_all', header=True)
+    sftr = get_data_from_csv('../data/tr_telco_all', header=True)
+
+    mi_hdf = agg_traffic_hourly(sfmi).agg("sum", axis='columns')  # total hrly
+    tr_hdf = agg_traffic_hourly(sftr).agg("sum", axis='columns')  # total hrly
+
     operations = {'smsin_tot': agg.SUM('smsin'),
                   'smsout_tot': agg.SUM('smsout'),
                   'callin_tot': agg.SUM('callin'),
                   'callout_tot': agg.SUM('callout'),
                   'web_tot': agg.SUM('web')
                   }
-    mi_df = agg_by_time_stamp(sf_milano, time, ops=operations)
-    mi_res = get_congested_day(mi_df)
-    mi_res_hourly = agg_traffic_24_hours(mi_df)
-    # tr_df = agg_by_time_stamp(sf_milano, ops=operations)
-    # tr_res = get_congested_day(mi_df)
-    print 'Aggregated time slots {}\n'.format(mi_res)
+    mi_df = agg_by_time_stamp(sfmi, time, ops=operations)
+    tr_df = agg_by_time_stamp(sftr, time, ops=operations)
+
+    mi_hres = agg_traffic_24_hours(mi_df)  # per 24 hrs
+    tr_hres = agg_traffic_24_hours(tr_df)  # per 24 hrs
+
+    # Question 1):
+    # The most congested period in Milano
+    mi_congested = get_congested_day(mi_df)
+    tr_congested = get_congested_day(tr_df)
+    mi_max = mi_hres[mi_hres == mi_hres.max()].index[0]
+    tr_max = tr_hres[tr_hres == tr_hres.max()].index[0]
+
+    print 'Most congested day in Milan {}\n'.format(mi_congested)
+    print 'Most congested day in Trentino {}\n'.format(tr_congested)
+    print 'Most congested hour on avg in Milano is {}\n'.format(mi_max)
+    print 'Most congested period in Trentino is {}\n'.format(tr_max)
+    sns.lineplot(data=mi_hres, color='red', label='Milano')
+    sns.lineplot(data=tr_hres, color='blue', label='Trentino')
 
     # Question 2):
-    mi_prov_sf = get_data('../data/mi_provinces')
-    tr_prov_sf = get_data('')
+    # Top 5 Italian provinces which are most called by residents in Milano and
+    # Trentino
+    # cols = ['sq_id', 'prov', 'time_int', 'sq_to_prov', 'prov_to_sq']
+
+    mi_prov_sf = get_data_from_csv('../data/mi_provinces')
+    tr_prov_sf = get_data_from_csv('../data/tr_provinces')
     mi_to_prov = get_most_called_province(mi_prov_sf)
     tr_to_prov = get_most_called_province(tr_prov_sf)
-    print 'Most called province from Milano {}'.format(mi_to_prov)
+    print 'Most called provinces from Milano {}'.format(mi_to_prov)
+    print 'Most called provinces from Trentino {}'.format(mi_to_prov)
 
     # Question 3):
-    api_id = 'xxxx'
-    api_key = 'xxxx'
-    mi_tweet_sf = get_data_api(api_id, api_key)
+    # api_id = 'xxxx'
+    # api_key = 'xxxx'
+    # mi_tweet_sf = get_data_api(api_id, api_key)
+    df = get_data_from_json('../data/mi_social/social_pulse.json')
     res = tweeting_language_popularity(sf)
     print 'Top five language used in tweeting {}'.format(res[:5])
 
@@ -402,8 +437,31 @@ if __name__ == '__main__':
     plot_distributions(sfdf)
 
     # Question 5):
-
-    calculate_weather_traffic_corr(sf,
+    # Correlations between user communication activity and weather
+    sf = analysis.get_data_from_csv('../data/mi_telco_all/')
+    calculate_weather_traffic_corr(mi_sf,
                                    'Milano - P.zza  Zavattari',  # Wth Station
                                    '../data/mi_weather/',
                                    '../data/mi_sensors/')
+    # Trentino
+    tr_sf = analysis.get_data_from_csv('../data/mi_telco_all/')
+    tw = tr_sf[tr_sf['station'] == 'T0437'][['date', 'maxTemperature',
+                                             'maxWind', 'minTemperature',
+                                             'minWind']]
+    tw = tw.to_dataframe().set_index('date')
+    # sftr = get_data_from_csv('../data/tr')
+    sftr_h = agg_traffic_hourly(sftr)
+    traffic = sftr_h.agg('sum', axis='columns')
+    tw = tw.join(traffic, how='outer')
+    tw.dropna(inplace=True)
+    print('{}'.format(tw.corr())
+
+
+    # Question 6):
+    # Heatmap indicating traffic intensity across 24hrs with traffic
+    # intensity increasing between 08:00 to 16:00 across both cities.
+    df = pd.DataFrame({'Trentino': tr_hdf, 'Milano': mi_hdf})
+    sns.heatmap(df)
+    plt.show()
+
+    # Question 7
