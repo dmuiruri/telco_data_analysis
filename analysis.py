@@ -206,22 +206,61 @@ def plot_distributions(sfdf):
     plt.savefig('./distributions.png')
 
 
-def process_weather_data(path_weather, path_sensor):
+def process_sensors(path_sensors):
     """
-    Process weather data.
+    Process sensors data.
+    path_sensors: path to a sensors file
+
+    There are different sensors in various locations and in some cases more
+    than one sensor measuring the same weather parameter.
+    """
+    sens = get_data_from_csv(path_sensors)
+    st = sens.groupby(key_columns='street', operations={'count': agg.count()})
+    return st
+
+
+def get_all_weather_data(path_weather, path_sensor):
+    """
+    Get all recorded sensor data in one stable
 
     path_weather: path to weather data
     path_sensor: path to sensor data
 
-    Returns a graphlab's SFrame
+    Returns a pandas DataFrame
     The weather recording data and sensor information is given in two seperate
     files, where the weather data contains measurements and sensor id, sensor
     data contains sensor information.
     """
     weather = get_data_from_csv(path_weather)  # '../data/mi_weather/'
     sensors = get_data_from_csv(path_sensor)  # '../data/mi_sensors/'
-    wdata = weather.join(sensors, on='sensor', how='left')
-    return wdata
+    ws = weather.join(sensors, on='sensor', how='left')
+
+    ind = ws[ws['sensor'] == ws['sensor'][0]]['time']
+    resdf = pd.DataFrame(index=pd.to_datetime(ind))
+
+    for sens in sensors['sensor']:
+        wdf = ws[ws['sensor'] == sens].sort('time')[['time', 'obs']]
+        name = sensors[sensors['sensor'] == sens]['senstype'][0]
+        df = wdf.to_dataframe().rename(columns={'obs': sens}).set_index('time')
+        resdf = resdf.join(df, how='outer')  # contains NaN values
+    return resdf
+
+
+def weather_stations(sensor_path):
+    """
+    Get the weather stations and the amount of sensors in each station.
+    """
+    sens = get_data_from_csv(sensor_path)  # '../data/mi_sensors/'
+    st = sens.groupby(key_columns='street', operations={'count': agg.COUNT()})
+    return st
+
+
+def get_sensors_in_a_given_station(sensor_path, station):
+    """
+    Get sensors located in a given weather station.
+    """
+    sens_d = get_data_from_csv(sensor_path)  # '../data/mi_sensors/'
+    return sens_d[sens_d['street'] == station]
 
 
 if __name__ == '__main__':
