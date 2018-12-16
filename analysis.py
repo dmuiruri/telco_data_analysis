@@ -65,7 +65,7 @@ def process_text_files(path_txt, path_csv, sep, cols=[]):
 
 def get_data_from_csv(path, header=True):
     """
-    Get data for analysis.
+    Get data for analysis. ps: give full path if single file in folder.
 
     path: A path string to a directory containing csv rile
 
@@ -230,19 +230,6 @@ def plot_distributions(sfdf):
     plt.savefig('./distributions.png')
 
 
-def process_sensors(path_sensors):
-    """
-    Process sensors data.
-    path_sensors: path to a sensors file
-
-    There are different sensors in various locations and in some cases more
-    than one sensor measuring the same weather parameter.
-    """
-    sens = get_data_from_csv(path_sensors)
-    st = sens.groupby(key_columns='street', operations={'count': agg.count()})
-    return st
-
-
 def get_all_weather_data(path_weather, path_sensor):
     """
     Get all recorded sensor data in one stable
@@ -274,8 +261,9 @@ def weather_stations(sensor_path):
     """
     Get the weather stations and the amount of sensors in each station.
     """
-    sens = get_data_from_csv(sensor_path)  # '../data/mi_sensors/'
-    st = sens.groupby(key_columns='street', operations={'count': agg.COUNT()})
+    sensors = get_data_from_csv(sensor_path)  # '../data/mi_sensors/'
+    st = sensors.groupby(key_columns='street',
+                         operations={'sensors': agg.COUNT()})
     return st
 
 
@@ -297,7 +285,6 @@ def calculate_weather_traffic_corr(sf, station, path_weather, path_sensor):
     tot_traffic = agg_traffic_hourly(sf).aggregate('sum', axis='columns')
     data = pd.DataFrame(tot_traffic)
     sens = get_sensors_in_a_given_station(path_sensor, station)
-    # sensors = sensor_sf['sensor']
     weather = get_all_weather_data(path_weather, path_sensor)
     for sensor in sens['sensor']:
         data = data.join(weather[sensor], how='outer')
@@ -308,6 +295,73 @@ def calculate_weather_traffic_corr(sf, station, path_weather, path_sensor):
     colnames = {sensor: names['senstype'][sensor] for sensor in sens['sensor']}
     data.rename(columns=colnames, inplace=True)
     return data.corr()
+
+
+def get_all_poll_data(path_pollution, path_sensor):
+    """
+    Get all recorded pollution data in one table
+
+    path_pollution: path to pollution data
+    path_sensor: path to pollution sensor data
+
+    Returns a pandas DataFrame
+    The pollution recording data and sensor information is given in
+    two seperate files, where the weather data contains measurements and
+    sensor id, sensor data contains sensor information.
+    """
+    poll = get_data_from_csv(path_pollution)  # '../data/mi_pollution/'
+    sensors = get_data_from_csv(path_sensor)  # '../data/mi_pol_sensors'
+    ws = poll.join(sensors, on='sens_id', how='left')
+    ind = poll[poll['sens_id'] == poll['sens_id'][0]]['time']
+    resdf = pd.DataFrame(index=pd.to_datetime(ind))
+
+    for sens in sensors['sens_id']:
+        pdf = poll[poll['sens_id'] == sens].sort('time')[['time', 'obs']]
+        name = sensors[sensors['sens_id'] == sens]['senstype'][0]
+        pdf = pdf.to_dataframe().rename(columns={'obs': sens}).set_index('time')
+        resdf = resdf.join(pdf, how='outer')  # contains NaN values
+    return resdf
+
+
+def pollution_sens_stations(path_sensors):
+    """
+    Get the pollution stations and the amount of sensors in each station.
+    """
+    sen = get_data_from_csv(path_sensors)  # full path for single file
+    st = sen.groupby(key_columns='street_name',
+                     operations={'sensors': agg.COUNT()})
+    return st
+
+
+def get_sensors_in_poll_station(sensor_path, station):
+    """
+    Get sensors located in a given weather station.
+
+    """
+    sens_d = get_data_from_csv(sensor_path)  # Full path for one file
+    print(sens_d)
+    return sens_d[sens_d['street_name'] == station]
+
+
+# def calculate_poll_traffic_corr(sf, station, path_poll, path_sensor):
+#     """
+#     Calculate the correlation between pollution and telco traffic.
+#
+#     sf: traffic SFrame
+#     """
+#     tot_traffic = agg_traffic_hourly(sf).aggregate('sum', axis='columns')
+#     data = pd.DataFrame(tot_traffic)
+#     sens = get_sensors_in_poll_station(path_sensor, station)
+#     poll = get_all_poll_data(path_poll, path_sensor)
+#     for sensor in sens['sens_id']:
+#         data = data.join(poll[sensor], how='outer')
+#     data.dropna(inplace=True)
+#
+#     # Renaming results
+#     names = sens.to_dataframe().set_index('sens_id').to_dict()
+#     colnames = {sensor: names['senstype'][sensor] for sensor in sens['sens_id']}
+#     data.rename(columns=colnames, inplace=True)
+#     return data.corr()
 
 
 if __name__ == '__main__':
