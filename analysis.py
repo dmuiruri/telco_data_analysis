@@ -74,7 +74,7 @@ def get_data_from_csv(path, header=True):
     return gp.SFrame.read_csv(path, header=header)
 
 
-def agg_by_time_slots(sf, groupingcol, ops={}):
+def agg_by_time_stamp(sf, groupingcol, ops={}):
     """
     Aggregate a given SFrame by the given set of operations.
 
@@ -83,26 +83,23 @@ def agg_by_time_slots(sf, groupingcol, ops={}):
     ops: A dict of operations as defined in graphlab API
     Returns a pandas DataFrame
 
-    The data is recorded in intervals of 10 mins, aggregate them to
-    a daily frequency.
+    The data is recorded in intervals of 10 mins
     """
     # TODO Refactor and remove the code to convert to a dataframe
     res = sf.groupby(key_columns=groupingcol, operations=ops)
     # Convert into a pandas dataframe better handling of timestamps
-    res['utc'] = res['time_col'].apply(lambda x: dt.utcfromtimestamp(x/1e3).
-                                       strftime('%Y-%m-%d %H:%M:%S'))
-    # df['utc'] = [dt.utcfromtimestamp(i/1e3).strftime('%Y-%m-%d %H:%M:%S')
-    #              for i in df['time']]
+    res['utc'] = res['time'].apply(lambda x: dt.utcfromtimestamp(x/1e3).
+                                   strftime('%Y-%m-%d %H:%M:%S'))
     sf_df = res.to_dataframe()
     sf_df.set_index('utc', inplace=True)
-    sf_df.index = pd.to_datetime(df.index)
+    sf_df.index = pd.to_datetime(sf_df.index)
     sf_df.drop(columns='time', inplace=True)
     return sf_df
 
 
-def agg_traffic_per_hour(sfdf):
+def agg_traffic_24_hours(sfdf):
     """
-    Aggregate data according to recording hours.
+    Agg data according to recording hour.
 
     This means calculating the mean of the data over a given hour, e.g. 23:00
     taking the mean of all data recorded at 23:00 each day so that it is
@@ -124,6 +121,33 @@ def agg_traffic_per_hour(sfdf):
     sfdf.index = pd.to_datetime(sfdf.index)
     sfdf = sfdf.resample('H').sum()
     return np.log(sfdf.aggregate('sum', axis='columns'))
+
+
+def agg_traffic_hourly(sf):
+    """
+    Aggregate data hourly.
+    """
+    ops = {'smsin_tot': agg.SUM('smsin'),
+           'smsout_tot': agg.SUM('smsout'),
+           'callin_tot': agg.SUM('callin'),
+           'callout_tot': agg.SUM('callout'),
+           'web_tot': agg.SUM('web')
+           }
+
+    # sfdf = agg_by_time_stamp(sf, groupingcol, ops)
+    # sfdf = sfdf.resample('H').sum()
+
+    res = sf.groupby(key_columns='time', operations=ops)
+    # Convert into a pandas dataframe better handling of timestamps
+    res['utc'] = res['time'].apply(lambda x: dt.utcfromtimestamp(x/1e3).
+                                   strftime('%Y-%m-%d %H:%M:%S'))
+    sf_df = res.to_dataframe()
+    sf_df.set_index('utc', inplace=True)
+    sf_df.index = pd.to_datetime(sf_df.index)
+    sf_df = sf_df.resample('H').sum()
+    sf_df.drop(columns='time', inplace=True)
+
+    return sf_df
 
 
 def get_congested_day(df):
@@ -180,7 +204,7 @@ def tweeting_language_popularity(sf):
 
 def plot_distributions(sfdf):
     """
-    Plot distributions comparing Dec and Nov agg_traffic_per_hour.
+    Plot distributions comparing Dec and Nov agg_traffic_24_hours.
     sfdf: is a pandas DataFrame
     """
     calls_nov = sfdf['26/11/2013':'28/11/2013'][['callin_tot', 'callout_tot']]
@@ -263,6 +287,23 @@ def get_sensors_in_a_given_station(sensor_path, station):
     return sens_d[sens_d['street'] == station]
 
 
+def calculate_weather_traffic_corr(sf, station, path_weather, path_sensor):
+    """
+    Calculate the correlation between weather and telco traffic.
+
+    sf: traffic SFrame
+    """
+    # df.agg("mean", axis="columns") # multiple sensors in same wstation
+    tot_traffic = agg_traffic_hourly(sf).aggregate('sum', axis='columns')
+    data = pd.DataFrame(tot_traffic)
+    sensors = get_sensors_in_a_given_station(path_sensor, station)['sensor']
+    weather = get_all_weather_data(path_weather, path_sensor)
+    for sensor in sensors:
+        data = data.join(weather[sensor], how='outer')
+    data.dropna(inplace=True)
+    return data.corr()
+
+
 if __name__ == '__main__':
     # Question 1):
 
@@ -275,10 +316,10 @@ if __name__ == '__main__':
                   'callout_tot': agg.SUM('callout'),
                   'web_tot': agg.SUM('web')
                   }
-    mi_df = agg_by_time_slots(sf_milano, time, ops=operations)
+    mi_df = agg_by_time_stamp(sf_milano, time, ops=operations)
     mi_res = get_congested_day(mi_df)
-    mi_res_hourly = agg_traffic_per_hour(mi_df)
-    # tr_df = agg_by_time_slots(sf_milano, ops=operations)
+    mi_res_hourly = agg_traffic_24_hours(mi_df)
+    # tr_df = agg_by_time_stamp(sf_milano, ops=operations)
     # tr_res = get_congested_day(mi_df)
     print 'Aggregated time slots {}\n'.format(mi_res)
 
@@ -297,7 +338,7 @@ if __name__ == '__main__':
     print 'Top five language used in tweeting {}'.format(res[:5])
 
     # Question 4):
-    sfdf_dist = agg_by_time_slots(sf_milano)
+    sfdf_dist = agg_traffic_24_hours(sf_milano)  # confirm if correct func
     plot_distributions(sfdf)
 
     # Question 5):
