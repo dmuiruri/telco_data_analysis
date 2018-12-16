@@ -296,16 +296,16 @@ def calculate_weather_traffic_corr(sf, station, path_weather, path_sensor):
     # df.agg("mean", axis="columns") # multiple sensors in same wstation
     tot_traffic = agg_traffic_hourly(sf).aggregate('sum', axis='columns')
     data = pd.DataFrame(tot_traffic)
-    sensor_sf = get_sensors_in_a_given_station(path_sensor, station)
-    sensors = sensor_sf['sensor']
+    sens = get_sensors_in_a_given_station(path_sensor, station)
+    # sensors = sensor_sf['sensor']
     weather = get_all_weather_data(path_weather, path_sensor)
-    for sensor in sensors:
+    for sensor in sens['sensor']:
         data = data.join(weather[sensor], how='outer')
     data.dropna(inplace=True)
 
     # Renaming results
-    names = sensor_sf.to_dataframe().set_index('sensor').to_dict()
-    colnames = {sensor: names['senstype'][sensor] for sensor in sensors}
+    names = sens.to_dataframe().set_index('sensor').to_dict()
+    colnames = {sensor: names['senstype'][sensor] for sensor in sens['sensor']}
     data.rename(columns=colnames, inplace=True)
     return data.corr()
 
@@ -348,7 +348,7 @@ if __name__ == '__main__':
     plot_distributions(sfdf)
 
     # Question 5):
-    
+
     calculate_weather_traffic_corr(sf,
                                    'Milano - P.zza  Zavattari',  # Wth Station
                                    '../data/mi_weather/',
